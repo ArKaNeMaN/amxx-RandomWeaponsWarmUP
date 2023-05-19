@@ -256,7 +256,7 @@ public Show_Timer() {
 	#endif
 	
 	set_hudmessage(135, 206, 235, .x = -1.0, .y = 0.08, .holdtime = 0.9, .channel = -1);
-	ShowSyncHudMsg(0, g_iHudSync2, "Разминка на %s!^nРестарт через %d сек", g_SelectedMode[WM_Title], timer);
+	ShowSyncHudMsg(0, g_iHudSync2, "%s^nРестарт через %d сек", g_SelectedMode[WM_Title], timer);
 }
 #endif
 
@@ -277,7 +277,7 @@ public Hud_Message() {
 	#endif
 
 	set_hudmessage(135, 206, 235, .x = -1.0, .y = 0.08, .holdtime = 0.9, .channel = -1);
-	ShowSyncHudMsg(0, g_iHudSync2, "Разминка на %s!", g_SelectedMode[WM_Title]);
+	ShowSyncHudMsg(0, g_iHudSync2, "%s", g_SelectedMode[WM_Title]);
 }
 #endif
 
