@@ -1,0 +1,4 @@
+*.amxx
+*.zip
+.build
+plugins-*.ini

@@ -1,0 +1,68 @@
+[
+    {
+        "Title": "Разминка на AK47/M4A1 + Deagle",
+        "Items": [
+            {
+                "Type": "Random",
+                "Items": [
+                    {
+                        "Type": "Weapon",
+                        "Name": "weapon_m4a1"
+                    },
+                    {
+                        "Type": "Weapon",
+                        "Name": "weapon_ak47"
+                    }
+                ]
+            },
+            {
+                "Type": "Weapon",
+                "Name": "weapon_deagle"
+            }
+        ]
+    },
+    {
+        "Title": "Разминка на гранатах",
+        "Items": [
+            {
+                "Type": "Weapon",
+                "Name": "weapon_hegrenade",
+                "BpAmmo": 99
+            }
+        ]
+    },
+    {
+        "Title": "Разминка на пистолетах",
+        "Items": [
+            {
+                "Type": "Random",
+                "Items": [
+                    {
+                        "Type": "Weapon",
+                        "Name": "weapon_usp"
+                    },
+                    {
+                        "Type": "Weapon",
+                        "Name": "weapon_elite"
+                    },
+                    {
+                        "Type": "Weapon",
+                        "Name": "weapon_glock18"
+                    },
+                    {
+                        "Type": "Weapon",
+                        "Name": "weapon_deagle"
+                    },
+                    {
+                        "Type": "Weapon",
+                        "Name": "weapon_p228"
+                    },
+                    {
+                        "Type": "Weapon",
+                        "Name": "weapon_fiveseven"
+                    }
+                ]
+            }
+        ]
+    }
+]
