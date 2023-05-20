@@ -1,28 +1,12 @@
 #include <amxmodx>
 #include <reapi>
 #include <json>
+#include <hamsandwich>
 #include <VipM/ItemsController>
-
-/*■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■*/
-#define TIME_RR 	40	// Время разминки
-#define NUM_RR		2	// Кол-во рестартов
-#define LATENCY		1.5	// Задержка между рестартами
-#define DM_MODE		1	// Возрождение после смерти; 0 - отключить (будет длится раунд или до победы)
-#define PROTECTED 	2	// Сколько секунд действует защита после возрождения (актуально для DM_MODE); 0 - отключить
 
 #define SOUND			// Музыка под час разминки
 #define STOP_PLUGS		// Отключать плагины на время разминки (Файл amxmodx/configs/plugins/RWW/DisablePlugins.json)
 #define IGNORE_MAPS			// Отключать этот плагин на указанных картах (Файл amxmodx/configs/plugins/RWW/IgnoredMaps.json)
-//#define REMOVE_MAP_WPN    // Удалять ентити мешающие разминке на картах типа: awp_, 35hp_ и т.п. [по умолчанию выкл.]
-//#define BLOCK_PICKUP           // Запрет поднятия оружия с земли (не актуально при вкл. #define REMOVE_MAP_WPN) [по умолчанию выкл.]
-//#define STOP_STATS		// Отключать запись статистики на время разминки  CSStatsX SQL by serfreeman1337 0.7.4+1 [по умолчанию выкл.]
-
-// TODO: Вынести это всё в квары
-/*■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■*/
-
-#if defined REMOVE_MAP_WPN
-#include <hamsandwich>
-#endif
 
 #define MAP_NAME_MAX_LEN 32
 #define PLUGIN_NAME_MAX_LEN 64
@@ -33,6 +17,20 @@ enum _:S_WarmupMode {
 	Array:WM_Items,
 }
 
+enum E_Cvars {
+	Cvar_Duration,
+	Cvar_RestartsNum,
+	Float:Cvar_RestartInterval,
+	bool:Cvar_DisableStats,
+	bool:Cvar_CleanupMap,
+	bool:Cvar_WeaponsPickupBlock,
+	
+	bool:Cvar_DeathMatch_Enable,
+	Cvar_DeathMatch_SpawnProtectionDuration,
+}
+new g_Cvars[E_Cvars];
+#define Cvar(%1) g_Cvars[Cvar_%1]
+
 #if defined SOUND
 new const soundRR[][] =	// Указывать звук, например 1.mp3
 {	
@@ -42,29 +40,20 @@ new const soundRR[][] =	// Указывать звук, например 1.mp3
 }
 #endif
 
-#if DM_MODE == 0
 new HookChain:fwd_RRound;
 new g_iRound;
-#endif
 
-#if defined REMOVE_MAP_WPN
 new HamHook:fwd_Equip,
 	HamHook:fwd_WpnStrip,
 	HamHook:fwd_Entity;
-#endif
 
-#if defined STOP_STATS
-new g_iHudSync;
-#endif
-new g_iImmunuty, g_iRespawn, g_iHudSync2;
 new HookChain:fwd_NewRound,
-	#if defined BLOCK_PICKUP
 	HookChain:fwd_BlockEntity,
-	#endif
 	HookChain:fwd_Spawn,
 	HookChain:fwd_GiveC4;
 
-const TASK_TIMER_ID = 33264;
+new g_iHud_Stats;
+new g_iImmunuty, g_iRespawn, g_iHud_Timer;
 
 #if defined STOP_PLUGS
 new Array:g_aDisablePlugins = Invalid_Array;
@@ -83,7 +72,7 @@ public plugin_init() {
 
 	#if defined IGNORE_MAPS
 	if (IsMapIgnored()) {
-		// TODO: Добавить лог о том что разминка выключена
+		log_amx("[INFO] WarmUP disabled on this map.");
 		pause("ad");
 		return;
 	}
@@ -94,6 +83,7 @@ public plugin_init() {
 	#endif
 
 	WarmupModesLoad();
+	RegisterCvars();
 	
 	fwOnStarted = CreateMultiForward("RWW_OnStarted", ET_IGNORE);
 	fwOnFinished = CreateMultiForward("RWW_OnFinished", ET_IGNORE);
@@ -102,28 +92,20 @@ public plugin_init() {
 	DisableHookChain(fwd_NewRound = RegisterHookChain(RG_CSGameRules_CheckMapConditions, "fwdRoundStart", true));
 	DisableHookChain(fwd_Spawn = RegisterHookChain(RG_CBasePlayer_Spawn, "fwdPlayerSpawnPost", true));
 	DisableHookChain(fwd_GiveC4 = RegisterHookChain(RG_CSGameRules_GiveC4, "fwdGiveC4", false));
+	DisableHookChain(fwd_BlockEntity = RegisterHookChain(RG_CBasePlayer_HasRestrictItem, "fwdHasRestrictItemPre", false));
+	EnableHookChain(fwd_RRound = RegisterHookChain(RG_CSGameRules_RestartRound, "fwdRestartRound_Pre"));
 
-	#if defined REMOVE_MAP_WPN
 	DisableHamForward(fwd_Equip = RegisterHam(Ham_Use, "game_player_equip", "CGamePlayerEquip_Use", false));
 	DisableHamForward(fwd_WpnStrip = RegisterHam(Ham_Use, "player_weaponstrip", "CStripWeapons_Use", false));
 	DisableHamForward(fwd_Entity = RegisterHam(Ham_CS_Restart, "armoury_entity", "CArmoury_Restart", false));
-	#endif
 
-	#if DM_MODE == 0
-	EnableHookChain(fwd_RRound = RegisterHookChain(RG_CSGameRules_RestartRound, "fwdRestartRound_Pre"));
-	#endif
-
-	#if defined BLOCK_PICKUP
-	DisableHookChain(fwd_BlockEntity = RegisterHookChain(RG_CBasePlayer_HasRestrictItem, "fwdHasRestrictItemPre", false));
 	register_clcmd("drop", "ClCmd_Drop");
-	#endif
 
 	g_iImmunuty = get_cvar_pointer("mp_respawn_immunitytime");
 	g_iRespawn  = get_cvar_pointer("mp_forcerespawn");
-	#if defined STOP_STATS
-	g_iHudSync = CreateHudSyncObj();
-	#endif
-	g_iHudSync2 = CreateHudSyncObj();
+
+	g_iHud_Stats = CreateHudSyncObj();
+	g_iHud_Timer = CreateHudSyncObj();
 
 	g_bWarupInProgress = false;
 }
@@ -134,18 +116,17 @@ public plugin_end() {
 	}
 }
 
-#if defined BLOCK_PICKUP
+
 public fwdHasRestrictItemPre() {
 	SetHookChainReturn(ATYPE_INTEGER, true);
 	return HC_SUPERCEDE;
 }
 
 public ClCmd_Drop() {
-	return g_bWarupInProgress
+	return (g_bWarupInProgress && Cvar(WeaponsPickupBlock))
 		? PLUGIN_HANDLED
 		: PLUGIN_CONTINUE;
 }
-#endif
 
 #if defined SOUND
 public plugin_precache() {
@@ -166,27 +147,25 @@ public fwdRoundEnd(WinStatus:status, ScenarioEventEndRound:event, Float:tmDelay)
 public fwdRoundStart() {
 	g_bWarupInProgress = true;
 
-	#if defined REMOVE_MAP_WPN
-	EnableHamForward(fwd_Equip);
-	EnableHamForward(fwd_WpnStrip);
-	EnableHamForward(fwd_Entity);
-	#endif
+	if (Cvar(CleanupMap)) {
+		EnableHamForward(fwd_Equip);
+		EnableHamForward(fwd_WpnStrip);
+		EnableHamForward(fwd_Entity);
+	}
 
 	DisableHookChain(fwd_NewRound);
 	EnableHookChain(fwd_Spawn);
 	EnableHookChain(fwd_GiveC4);
 
-	set_pcvar_num(g_iRespawn, DM_MODE);
-	set_pcvar_num(g_iImmunuty, PROTECTED);
+	set_pcvar_num(g_iRespawn, Cvar(DeathMatch_Enable));
+	set_pcvar_num(g_iImmunuty, Cvar(DeathMatch_SpawnProtectionDuration));
 
-	#if DM_MODE >= 1
-	set_cvar_string("mp_round_infinite", "1");
-	set_task(1.0, "Show_Timer", .flags = "a", .repeat = TIME_RR);
-	#endif
-
-	#if DM_MODE == 0
-	set_task(1.0, "Hud_Message", .flags = "a", .repeat = 25 );
-	#endif
+	if (Cvar(DeathMatch_Enable)) {
+		set_cvar_num("mp_round_infinite", 1);
+		set_task(1.0, "Show_Timer", .flags = "a", .repeat = Cvar(Duration));
+	} else {
+		set_task(1.0, "Hud_Message", .flags = "a", .repeat = 25 );
+	}
 
 	#if defined SOUND
 	static cmd[64];
@@ -194,13 +173,13 @@ public fwdRoundStart() {
 	client_cmd(0, "%s", cmd);
 	#endif
 
-	#if defined STOP_STATS
-	set_cvar_num("csstats_pause", 1);
-	#endif
+	if (Cvar(DisableStats)) {
+		set_cvar_num("csstats_pause", 1);
+	}
 
-	#if defined BLOCK_PICKUP
-	EnableHookChain(fwd_BlockEntity);
-	#endif
+	if (Cvar(WeaponsPickupBlock)) {
+		EnableHookChain(fwd_BlockEntity);
+	}
 
 	#if defined STOP_PLUGS	
 	PluginController(1);
@@ -218,9 +197,9 @@ public fwdPlayerSpawnPost(const id) {
 		return;
 	}
 
-	#if defined REMOVE_MAP_WPN
-	InvisibilityArmourys();
-	#endif
+	if (Cvar(CleanupMap)) {
+		InvisibilityArmourys();
+	}
 
 	BuyZone_ToogleSolid(SOLID_NOT);
 	rg_remove_all_items(id);
@@ -236,12 +215,11 @@ public fwdGiveC4() {
 	return HC_SUPERCEDE;
 }
 
-#if DM_MODE >= 1
 public Show_Timer() {
 	static timer = -1;
 
 	if (timer == -1) {
-		timer = TIME_RR;
+		timer = Cvar(Duration);
 	}
 
 	if (--timer == 0) {
@@ -250,17 +228,15 @@ public Show_Timer() {
 		return;
 	}
 
-	#if defined STOP_STATS
-	set_hudmessage(255, 0, 0, .x = -1.0, .y = 0.05, .holdtime = 0.9, .channel = -1);
-	ShowSyncHudMsg(0, g_iHudSync, "[Статистика Отключена]");
-	#endif
+	if (Cvar(DisableStats)) {
+		set_hudmessage(255, 0, 0, .x = -1.0, .y = 0.05, .holdtime = 0.9, .channel = -1);
+		ShowSyncHudMsg(0, g_iHud_Stats, "[Статистика Отключена]");
+	}
 	
 	set_hudmessage(135, 206, 235, .x = -1.0, .y = 0.08, .holdtime = 0.9, .channel = -1);
-	ShowSyncHudMsg(0, g_iHudSync2, "%s^nРестарт через %d сек", g_SelectedMode[WM_Title], timer);
+	ShowSyncHudMsg(0, g_iHud_Timer, "%s^nРестарт через %d сек", g_SelectedMode[WM_Title], timer);
 }
-#endif
 
-#if DM_MODE == 0
 public fwdRestartRound_Pre() {
 	g_iRound++;
 
@@ -271,38 +247,15 @@ public fwdRestartRound_Pre() {
 }
 
 public Hud_Message() {
-	#if defined STOP_STATS
-	set_hudmessage(255, 0, 0, .x = -1.0, .y = 0.05, .holdtime = 0.9, .channel = -1);
-	ShowSyncHudMsg(0, g_iHudSync, "[Статистика Отключена]");
-	#endif
+	if (Cvar(DisableStats)) {
+		set_hudmessage(255, 0, 0, .x = -1.0, .y = 0.05, .holdtime = 0.9, .channel = -1);
+		ShowSyncHudMsg(0, g_iHud_Stats, "[Статистика Отключена]");
+	}
 
 	set_hudmessage(135, 206, 235, .x = -1.0, .y = 0.08, .holdtime = 0.9, .channel = -1);
-	ShowSyncHudMsg(0, g_iHudSync2, "%s", g_SelectedMode[WM_Title]);
-}
-#endif
-
-public SV_Restart() {
-	set_cvar_num("sv_restart", 1);
-	set_task(2.0, "End_RR");
+	ShowSyncHudMsg(0, g_iHud_Timer, "%s", g_SelectedMode[WM_Title]);
 }
 
-public End_RR() {
-	#if defined STOP_STATS
-	set_hudmessage(255, 0, 0, .x = -1.0, .y = 0.05, .holdtime = 5.0, .channel = -1);
-	ShowSyncHudMsg(0, g_iHudSync, "[Статистика Включена]");
-	#endif
-
-	set_hudmessage(135, 206, 235, .x = -1.0, .y = 0.08, .holdtime = 5.0, .channel = -1);
-	ShowSyncHudMsg(0, g_iHudSync2, "Разминка окончена!");
-
-	for (new i = 1; i <= MaxClients; i++) {
-		if (is_user_alive(i)) {
-			rg_remove_items_by_slot(i, PRIMARY_WEAPON_SLOT);
-		}
-	}
-}
-
-#if defined REMOVE_MAP_WPN
 public CArmoury_Restart(const pArmoury) {
 	return HAM_SUPERCEDE;
 }
@@ -325,47 +278,59 @@ InvisibilityArmourys() {
 		}
 	}
 }
-#endif
 
 finishWurmUp() {
 	g_bWarupInProgress = false;
-			  
+
 	BuyZone_ToogleSolid(SOLID_TRIGGER);
 
-	#if defined REMOVE_MAP_WPN
-	DisableHamForward(fwd_Equip);
-	DisableHamForward(fwd_WpnStrip);
-	DisableHamForward(fwd_Entity);
-	#endif
+	if (Cvar(CleanupMap)) {
+		DisableHamForward(fwd_Equip);
+		DisableHamForward(fwd_WpnStrip);
+		DisableHamForward(fwd_Entity);
+	}
 
 	DisableHookChain(fwd_Spawn);
 	DisableHookChain(fwd_GiveC4);
 
-	set_cvar_string("mp_forcerespawn", "0");
-	set_cvar_string("mp_respawn_immunitytime", "0");
-	set_cvar_string("mp_round_infinite", "0");
+	set_cvar_num("mp_forcerespawn", 0);
+	set_cvar_num("mp_respawn_immunitytime", 0);
+	set_cvar_num("mp_round_infinite", 0);
 
-	#if defined STOP_STATS
-	set_cvar_num("csstats_pause", 0);
-	#endif
+	if (Cvar(DisableStats)) {
+		set_cvar_num("csstats_pause", 0);
+	}
 
-	#if defined BLOCK_PICKUP
-	DisableHookChain(fwd_BlockEntity);
-	#endif
+	if (Cvar(WeaponsPickupBlock)) {
+		DisableHookChain(fwd_BlockEntity);
+	}
 
-	#if defined STOP_PLUGS   
+	#if defined STOP_PLUGS
 	PluginController(0);
 	#endif
 	
 	ExecuteForward(fwOnFinished);
 
-	#if NUM_RR > 1       
-	set_task(LATENCY, "SV_Restart", .flags = "a", .repeat = NUM_RR - 1);
-	#endif
-	SV_Restart();
+	@Task_Restart();
+	if (Cvar(RestartsNum) > 1) {
+		set_task(Cvar(RestartInterval), "@Task_Restart", .flags = "a", .repeat = Cvar(RestartsNum) - 1);
+	}
+	set_task(Cvar(RestartInterval) * float(Cvar(RestartsNum) - 1), "@Task_WarmupEnd");
+}
 
-	// Не совсем понял какой именно таск надо убивать)
-	remove_task(TASK_TIMER_ID);
+@Task_Restart() {
+	set_member_game(m_bCompleteReset, true);
+	rg_restart_round();
+}
+
+@Task_WarmupEnd() {
+	if (Cvar(DisableStats)) {
+		set_hudmessage(255, 0, 0, .x = -1.0, .y = 0.05, .holdtime = 5.0, .channel = -1);
+		ShowSyncHudMsg(0, g_iHud_Stats, "[Статистика Включена]");
+	}
+
+	set_hudmessage(135, 206, 235, .x = -1.0, .y = 0.08, .holdtime = 5.0, .channel = -1);
+	ShowSyncHudMsg(0, g_iHud_Timer, "Разминка окончена!");
 }
 
 stock PluginController(stop) {
@@ -516,10 +481,63 @@ stock JSON:Json_GetFile(const sPath[]) {
 }
 
 stock GetConfigPath(const sPath[]) {
-    static __amxx_configsdir[PLATFORM_MAX_PATH];
-    if (!__amxx_configsdir[0]) {
-        get_localinfo("amxx_configsdir", __amxx_configsdir, charsmax(__amxx_configsdir));
-    }
-    
-    return fmt("%s/plugins/RWW/%s", __amxx_configsdir, sPath);
+	static __amxx_configsdir[PLATFORM_MAX_PATH];
+	if (!__amxx_configsdir[0]) {
+		get_localinfo("amxx_configsdir", __amxx_configsdir, charsmax(__amxx_configsdir));
+	}
+	
+	return fmt("%s/plugins/RWW/%s", __amxx_configsdir, sPath);
+}
+
+RegisterCvars() {
+	bind_pcvar_num(create_cvar(
+		"RWW_Duration", "40", FCVAR_NONE,
+		"Длительность разминки в секундах.",
+		true, 1.0
+	), Cvar(Duration));
+
+	bind_pcvar_num(create_cvar(
+		"RWW_RestartsNum", "2", FCVAR_NONE,
+		"Количество рестартов после разминки.",
+		true, 1.0
+	), Cvar(RestartsNum));
+
+	bind_pcvar_float(create_cvar(
+		"RWW_RestartInterval", "1.5", FCVAR_NONE,
+		"Интервал между рестартами в секундах.",
+		true, 1.0
+	), Cvar(RestartInterval));
+
+	bind_pcvar_num(create_cvar(
+		"RWW_CleanupMap", "0", FCVAR_NONE,
+		"Очистка карты от ентити, мешающих разминке.",
+		true, 0.0, true, 1.0
+	), Cvar(CleanupMap));
+
+	bind_pcvar_num(create_cvar(
+		"RWW_WeaponsPickupBlock", "0", FCVAR_NONE,
+		"Блокировка поднятие оружия на время разминки (неактуально при включеном RWW_CleanupMap).",
+		true, 0.0, true, 1.0
+	), Cvar(WeaponsPickupBlock));
+
+	bind_pcvar_num(create_cvar(
+		"RWW_DisableStats", "0", FCVAR_NONE,
+		"Приостанавливать ли учёт статистики на время разминки (через квар csstats_pause).",
+		true, 0.0, true, 1.0
+	), Cvar(DisableStats));
+
+
+	bind_pcvar_num(create_cvar(
+		"RWW_DeathMatch_Enable", "1", FCVAR_NONE,
+		"Включить режим DeathMatch на разминке (возрождение после смерти).",
+		true, 0.0, true, 1.0
+	), Cvar(DeathMatch_Enable));
+
+	bind_pcvar_num(create_cvar(
+		"RWW_DeathMatch_SpawnProtectionDuration", "2", FCVAR_NONE,
+		"Длительность неуязвимости после возврождения в секундах (только для DeathMatch режима).",
+		true, 0.0
+	), Cvar(DeathMatch_SpawnProtectionDuration));
+
+	AutoExecConfig(true, "Cvars", "RWW");
 }
