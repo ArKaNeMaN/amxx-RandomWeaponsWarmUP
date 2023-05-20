@@ -4,9 +4,7 @@
 #include <hamsandwich>
 #include <VipM/ItemsController>
 
-#define SOUND			// Музыка под час разминки
-#define STOP_PLUGS		// Отключать плагины на время разминки (Файл amxmodx/configs/plugins/RWW/DisablePlugins.json)
-#define IGNORE_MAPS			// Отключать этот плагин на указанных картах (Файл amxmodx/configs/plugins/RWW/IgnoredMaps.json)
+// #define SOUND
 
 #define MAP_NAME_MAX_LEN 32
 #define PLUGIN_NAME_MAX_LEN 64
@@ -53,11 +51,9 @@ new HookChain:fwd_NewRound,
 	HookChain:fwd_GiveC4;
 
 new g_iHud_Stats;
-new g_iImmunuty, g_iRespawn, g_iHud_Timer;
+new g_iCvar_ImmunutyTime, g_iCvar_ForceRespawn, g_iHud_Timer;
 
-#if defined STOP_PLUGS
 new Array:g_aDisablePlugins = Invalid_Array;
-#endif
 
 new bool:g_bWarupInProgress = false;
 new Array:g_aModes = Invalid_Array;
@@ -70,18 +66,13 @@ new fwOnFinished;
 public plugin_init() {
 	register_plugin("Random Weapons WarmUP", "3.0.0", "neugomon/h1k3/ArKaNeMaN");
 
-	#if defined IGNORE_MAPS
 	if (IsMapIgnored()) {
 		log_amx("[INFO] WarmUP disabled on this map.");
 		pause("ad");
 		return;
 	}
-	#endif
 
-	#if defined STOP_PLUGS
 	DisablePluginsLoad();
-	#endif
-
 	WarmupModesLoad();
 	RegisterCvars();
 	
@@ -101,8 +92,8 @@ public plugin_init() {
 
 	register_clcmd("drop", "ClCmd_Drop");
 
-	g_iImmunuty = get_cvar_pointer("mp_respawn_immunitytime");
-	g_iRespawn  = get_cvar_pointer("mp_forcerespawn");
+	g_iCvar_ImmunutyTime = get_cvar_pointer("mp_respawn_immunitytime");
+	g_iCvar_ForceRespawn  = get_cvar_pointer("mp_forcerespawn");
 
 	g_iHud_Stats = CreateHudSyncObj();
 	g_iHud_Timer = CreateHudSyncObj();
@@ -157,8 +148,8 @@ public fwdRoundStart() {
 	EnableHookChain(fwd_Spawn);
 	EnableHookChain(fwd_GiveC4);
 
-	set_pcvar_num(g_iRespawn, Cvar(DeathMatch_Enable));
-	set_pcvar_num(g_iImmunuty, Cvar(DeathMatch_SpawnProtectionDuration));
+	set_pcvar_num(g_iCvar_ForceRespawn, Cvar(DeathMatch_Enable));
+	set_pcvar_num(g_iCvar_ImmunutyTime, Cvar(DeathMatch_SpawnProtectionDuration));
 
 	if (Cvar(DeathMatch_Enable)) {
 		set_cvar_num("mp_round_infinite", 1);
@@ -181,9 +172,7 @@ public fwdRoundStart() {
 		EnableHookChain(fwd_BlockEntity);
 	}
 
-	#if defined STOP_PLUGS	
-	PluginController(1);
-	#endif
+	PluginController(true);
 
 	new iRnd = random_num(0, ArraySize(g_aModes) - 1);
 	ArrayGetArray(g_aModes, iRnd, g_SelectedMode);
@@ -218,7 +207,7 @@ public fwdGiveC4() {
 public Show_Timer() {
 	static timer = -1;
 
-	if (timer == -1) {
+	if (timer < 0) {
 		timer = Cvar(Duration);
 	}
 
@@ -305,9 +294,7 @@ finishWurmUp() {
 		DisableHookChain(fwd_BlockEntity);
 	}
 
-	#if defined STOP_PLUGS
-	PluginController(0);
-	#endif
+	PluginController(false);
 	
 	ExecuteForward(fwOnFinished);
 
@@ -333,7 +320,11 @@ finishWurmUp() {
 	ShowSyncHudMsg(0, g_iHud_Timer, "Разминка окончена!");
 }
 
-stock PluginController(stop) {
+PluginController(const bool:bState) {
+	if (g_aDisablePlugins == Invalid_Array) {
+		return;
+	}
+
 	new sPluginName[PLUGIN_NAME_MAX_LEN];
 	for (new i; i < ArraySize(g_aDisablePlugins); i++) {
 		ArrayGetString(g_aDisablePlugins, i, sPluginName, charsmax(sPluginName));
@@ -393,7 +384,7 @@ WarmupModesLoad() {
 	json_free(jModes);
 }
 
-stock DisablePluginsLoad() {
+DisablePluginsLoad() {
 	g_aDisablePlugins = ArrayCreate(PLUGIN_NAME_MAX_LEN, 4);
 
 	new JSON:jDisablePlugins = Json_GetFile(GetConfigPath("DisablePlugins.json"));
@@ -425,7 +416,7 @@ stock DisablePluginsLoad() {
 	json_free(jDisablePlugins);
 }
 
-stock bool:IsMapIgnored() {
+bool:IsMapIgnored() {
 	new JSON:jIgnoredMaps = Json_GetFile(GetConfigPath("IgnoredMaps.json"));
 
 	if (jIgnoredMaps == Invalid_JSON) {
@@ -457,14 +448,14 @@ stock bool:IsMapIgnored() {
 	return false;
 }
 
-stock BuyZone_ToogleSolid(const solid) {
+BuyZone_ToogleSolid(const solid) {
 	new entityIndex = 0;
 	while ((entityIndex = rg_find_ent_by_class(entityIndex, "func_buyzone"))) {
 		set_entvar(entityIndex, var_solid, solid);
 	}
 }
 
-stock JSON:Json_GetFile(const sPath[]) {
+JSON:Json_GetFile(const sPath[]) {
 	if (!file_exists(sPath)) {
 		log_amx("[ERROR] File '%s' not found.", sPath);
 		return Invalid_JSON;
@@ -480,7 +471,7 @@ stock JSON:Json_GetFile(const sPath[]) {
 	return jFile;
 }
 
-stock GetConfigPath(const sPath[]) {
+GetConfigPath(const sPath[]) {
 	static __amxx_configsdir[PLATFORM_MAX_PATH];
 	if (!__amxx_configsdir[0]) {
 		get_localinfo("amxx_configsdir", __amxx_configsdir, charsmax(__amxx_configsdir));
