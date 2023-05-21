@@ -114,7 +114,7 @@ public plugin_end() {
 
 
 public fwdHasRestrictItemPre() {
-	SetHookChainReturn(ATYPE_INTEGER, true);
+	SetHookChainReturn(ATYPE_BOOL, true);
 	return HC_SUPERCEDE;
 }
 
@@ -482,7 +482,10 @@ GetConfigPath(const sPath[]) {
 		get_localinfo("amxx_configsdir", __amxx_configsdir, charsmax(__amxx_configsdir));
 	}
 	
-	return fmt("%s/plugins/RWW/%s", __amxx_configsdir, sPath);
+	new sOut[PLATFORM_MAX_PATH];
+	formatex(sOut, charsmax(sOut), "%s/plugins/RWW/%s", __amxx_configsdir, sPath);
+
+	return sOut;
 }
 
 RegisterCvars() {
