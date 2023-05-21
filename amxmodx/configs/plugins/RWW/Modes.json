@@ -22,6 +22,15 @@
         ]
     },
     {
+        "Title": "Разминка на ножах",
+        "Items": [
+            {
+                "Type": "Weapon",
+                "Name": "weapon_knife"
+            }
+        ]
+    },
+    {
         "Title": "Разминка на гранатах",
         "Items": [
             {
