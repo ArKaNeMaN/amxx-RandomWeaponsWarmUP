@@ -22,6 +22,7 @@ enum E_Cvars {
 	bool:Cvar_DisableStats,
 	bool:Cvar_CleanupMap,
 	bool:Cvar_WeaponsPickupBlock,
+	bool:Cvar_OncePerMap,
 	
 	bool:Cvar_DeathMatch_Enable,
 	Cvar_DeathMatch_SpawnProtectionDuration,
@@ -132,9 +133,15 @@ public plugin_precache() {
 #endif
 
 public fwdRoundEnd(WinStatus:status, ScenarioEventEndRound:event, Float:tmDelay) {
-	if (event == ROUND_GAME_COMMENCE) {
+	static bool:bWasStarted;
+	if (
+		event == ROUND_GAME_COMMENCE
+		&& (!Cvar(OncePerMap) || !bWasStarted)
+	) {
 		EnableHookChain(fwd_NewRound);
 		ExecuteForward(fwOnStarted);
+
+		bWasStarted = true;
 	}
 }
 
@@ -514,6 +521,12 @@ RegisterCvars() {
 		Lang("RWW_CVAR_DISABLE_STATS"),
 		true, 0.0, true, 1.0
 	), Cvar(DisableStats));
+
+	bind_pcvar_num(create_cvar(
+		"RWW_OncePerMap", "1", FCVAR_NONE,
+		Lang("RWW_CVAR_ONCE_PER_MAP"),
+		true, 0.0, true, 1.0
+	), Cvar(OncePerMap));
 
 
 	bind_pcvar_num(create_cvar(
