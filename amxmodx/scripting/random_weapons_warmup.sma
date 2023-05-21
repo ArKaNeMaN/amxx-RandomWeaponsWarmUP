@@ -29,7 +29,10 @@ enum E_Cvars {
 new g_Cvars[E_Cvars];
 #define Cvar(%1) g_Cvars[Cvar_%1]
 
+#define Lang(%1) fmt("%l", %1)
+
 #if defined SOUND
+// TODO: Вынести в JSON файл
 new const soundRR[][] =	// Указывать звук, например 1.mp3
 {	
 	"sound/rww/RoundStart.mp3",
@@ -50,8 +53,8 @@ new HookChain:fwd_NewRound,
 	HookChain:fwd_Spawn,
 	HookChain:fwd_GiveC4;
 
-new g_iHud_Stats;
-new g_iCvar_ImmunutyTime, g_iCvar_ForceRespawn, g_iHud_Timer;
+new g_iHud_Stats, g_iHud_Timer;
+new g_iCvar_ImmunutyTime, g_iCvar_ForceRespawn;
 
 new Array:g_aDisablePlugins = Invalid_Array;
 
@@ -65,6 +68,7 @@ new fwOnFinished;
 
 public plugin_init() {
 	register_plugin("Random Weapons WarmUP", "3.0.0", "neugomon/h1k3/ArKaNeMaN");
+	register_dictionary("rww.ini");
 
 	if (IsMapIgnored()) {
 		log_amx("[INFO] WarmUP disabled on this map.");
@@ -130,7 +134,6 @@ public plugin_precache() {
 public fwdRoundEnd(WinStatus:status, ScenarioEventEndRound:event, Float:tmDelay) {
 	if (event == ROUND_GAME_COMMENCE) {
 		EnableHookChain(fwd_NewRound);
-		
 		ExecuteForward(fwOnStarted);
 	}
 }
@@ -216,11 +219,11 @@ public Show_Timer() {
 
 	if (Cvar(DisableStats)) {
 		set_hudmessage(255, 0, 0, .x = -1.0, .y = 0.05, .holdtime = 0.9, .channel = -1);
-		ShowSyncHudMsg(0, g_iHud_Stats, "[Статистика Отключена]");
+		ShowSyncHudMsg(0, g_iHud_Stats, "%l", "RWW_HUD_STATS_OFF");
 	}
 	
 	set_hudmessage(135, 206, 235, .x = -1.0, .y = 0.08, .holdtime = 0.9, .channel = -1);
-	ShowSyncHudMsg(0, g_iHud_Timer, "%s^nРестарт через %d сек", g_SelectedMode[WM_Title], timer);
+	ShowSyncHudMsg(0, g_iHud_Timer, "%l", "RWW_HUD_DM_TIMER", g_SelectedMode[WM_Title], timer);
 }
 
 public fwdRestartRound_Pre() {
@@ -235,11 +238,11 @@ public fwdRestartRound_Pre() {
 public Hud_Message() {
 	if (Cvar(DisableStats)) {
 		set_hudmessage(255, 0, 0, .x = -1.0, .y = 0.05, .holdtime = 0.9, .channel = -1);
-		ShowSyncHudMsg(0, g_iHud_Stats, "[Статистика Отключена]");
+		ShowSyncHudMsg(0, g_iHud_Stats, "%l", "RWW_HUD_STATS_OFF");
 	}
 
 	set_hudmessage(135, 206, 235, .x = -1.0, .y = 0.08, .holdtime = 0.9, .channel = -1);
-	ShowSyncHudMsg(0, g_iHud_Timer, "%s", g_SelectedMode[WM_Title]);
+	ShowSyncHudMsg(0, g_iHud_Timer, "%l", "RWW_HUD_NOT_DM", g_SelectedMode[WM_Title]);
 }
 
 public CArmoury_Restart(const pArmoury) {
@@ -310,11 +313,11 @@ finishWurmUp() {
 @Task_WarmupEnd() {
 	if (Cvar(DisableStats)) {
 		set_hudmessage(255, 0, 0, .x = -1.0, .y = 0.05, .holdtime = 5.0, .channel = -1);
-		ShowSyncHudMsg(0, g_iHud_Stats, "[Статистика Включена]");
+		ShowSyncHudMsg(0, g_iHud_Stats, "%l", "RWW_HUD_STATS_ON");
 	}
 
 	set_hudmessage(135, 206, 235, .x = -1.0, .y = 0.08, .holdtime = 5.0, .channel = -1);
-	ShowSyncHudMsg(0, g_iHud_Timer, "Разминка окончена!");
+	ShowSyncHudMsg(0, g_iHud_Timer, "%l", "RWW_HUD_WARMUP_END");
 }
 
 PluginController(const bool:bState) {
@@ -326,7 +329,7 @@ PluginController(const bool:bState) {
 	for (new i; i < ArraySize(g_aDisablePlugins); i++) {
 		ArrayGetString(g_aDisablePlugins, i, sPluginName, charsmax(sPluginName));
 
-		if (stop) {
+		if (bState) {
 			pause("ac", sPluginName);
 		} else {
 			unpause("ac", sPluginName);
@@ -478,50 +481,50 @@ GetConfigPath(const sPath[]) {
 RegisterCvars() {
 	bind_pcvar_num(create_cvar(
 		"RWW_Duration", "40", FCVAR_NONE,
-		"Длительность разминки в секундах.",
+		Lang("RWW_CVAR_DURATION"),
 		true, 1.0
 	), Cvar(Duration));
 
 	bind_pcvar_num(create_cvar(
 		"RWW_RestartsNum", "2", FCVAR_NONE,
-		"Количество рестартов после разминки.",
+		Lang("RWW_CVAR_RESTARTS_NUM"),
 		true, 1.0
 	), Cvar(RestartsNum));
 
 	bind_pcvar_float(create_cvar(
 		"RWW_RestartInterval", "1.5", FCVAR_NONE,
-		"Интервал между рестартами в секундах.",
+		Lang("RWW_CVAR_RESTART_INTERVAL"),
 		true, 1.0
 	), Cvar(RestartInterval));
 
 	bind_pcvar_num(create_cvar(
 		"RWW_CleanupMap", "0", FCVAR_NONE,
-		"Очистка карты от ентити, мешающих разминке.",
+		Lang("RWW_CVAR_CLEANUP_MAP"),
 		true, 0.0, true, 1.0
 	), Cvar(CleanupMap));
 
 	bind_pcvar_num(create_cvar(
 		"RWW_WeaponsPickupBlock", "0", FCVAR_NONE,
-		"Блокировка поднятие оружия на время разминки (неактуально при включеном RWW_CleanupMap).",
+		Lang("RWW_CVAR_WEAPONS_PICKUP_BLOCK"),
 		true, 0.0, true, 1.0
 	), Cvar(WeaponsPickupBlock));
 
 	bind_pcvar_num(create_cvar(
 		"RWW_DisableStats", "0", FCVAR_NONE,
-		"Приостанавливать ли учёт статистики на время разминки (через квар csstats_pause).",
+		Lang("RWW_CVAR_DISABLE_STATS"),
 		true, 0.0, true, 1.0
 	), Cvar(DisableStats));
 
 
 	bind_pcvar_num(create_cvar(
 		"RWW_DeathMatch_Enable", "1", FCVAR_NONE,
-		"Включить режим DeathMatch на разминке (возрождение после смерти).",
+		Lang("RWW_CVAR_DM_ENABLE"),
 		true, 0.0, true, 1.0
 	), Cvar(DeathMatch_Enable));
 
 	bind_pcvar_num(create_cvar(
 		"RWW_DeathMatch_SpawnProtectionDuration", "2", FCVAR_NONE,
-		"Длительность неуязвимости после возврождения в секундах (только для DeathMatch режима).",
+		Lang("RWW_CVAR_DM_SPAWN_PROTECTION_DURATION"),
 		true, 0.0
 	), Cvar(DeathMatch_SpawnProtectionDuration));
 
