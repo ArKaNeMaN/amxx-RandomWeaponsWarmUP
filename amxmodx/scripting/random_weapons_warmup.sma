@@ -176,9 +176,6 @@ public fwdRoundStart() {
 
 	new iRnd = random_num(0, ArraySize(g_aModes) - 1);
 	ArrayGetArray(g_aModes, iRnd, g_SelectedMode);
-	log_amx("[DEBUG] ArraySize(g_aModes) = %d", ArraySize(g_aModes));
-	log_amx("[DEBUG] iRnd = %d", iRnd);
-	log_amx("[DEBUG] g_SelectedMode[WM_Title] = %s", g_SelectedMode[WM_Title]);
 }
 
 public fwdPlayerSpawnPost(const id) {
@@ -376,9 +373,7 @@ WarmupModesLoad() {
 
 		json_free(jMode);
 
-		log_amx("[DEBUG] PUSH Mode{WM_Title='%s', count(WM_Items)=%d}", Mode[WM_Title], ArraySize(Mode[WM_Items]));
 		ArrayPushArray(g_aModes, Mode);
-		log_amx("[DEBUG] PUSH ArraySize(g_aModes) = %d", ArraySize(g_aModes));
 	}
 	
 	json_free(jModes);
