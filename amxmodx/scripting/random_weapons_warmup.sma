@@ -10,7 +10,7 @@
 enum _:S_WarmupMode {
 	WM_Title[64],
 	// TODO: WM_Duration, // Разная длительность у разных режимов
-	// TODO: WM_Music[PLATFORM_MAX_PATH], // Своя музыка на каждый режим
+	WM_Music[PLATFORM_MAX_PATH],
 	// TODO: WM_Cvars[S_CvarData], // Переопределение кваров на время разминки
 	Array:WM_Items,
 }
@@ -171,12 +171,10 @@ public fwdRoundStart() {
 }
 
 PlayWarmupMusic() {
-	// if (g_SelectedMode[WM_Music][0]) {
-	// 	client_cmd(0, "mp3 play ^"%s^"", g_SelectedMode[WM_Music]);
-	// 	return;
-	// } else
-
-	if (g_aMusic != Invalid_Array && ArraySize(g_aMusic)) {
+	if (g_SelectedMode[WM_Music][0]) {
+		client_cmd(0, "mp3 play ^"%s^"", g_SelectedMode[WM_Music]);
+		return;
+	} else if (g_aMusic != Invalid_Array && ArraySize(g_aMusic)) {
 		new sMusicPath[PLATFORM_MAX_PATH];
 		ArrayGetString(g_aMusic, random_num(0, ArraySize(g_aMusic) - 1), sMusicPath, charsmax(sMusicPath));
 		client_cmd(0, "mp3 play ^"%s^"", sMusicPath);
@@ -341,9 +339,11 @@ PluginController(const bool:bState) {
 }
 
 WarmupModesLoad() {
+	new const MODES_FILE_PATH[] = "Modes.json";
+
 	g_aModes = ArrayCreate(S_WarmupMode, 4);
 
-	new JSON:jModes = Json_GetFile(GetConfigPath("Modes.json"));
+	new JSON:jModes = Json_GetFile(GetConfigPath(MODES_FILE_PATH));
 
 	if (jModes == Invalid_JSON) {
 		set_fail_state("Can't load warmup modes from config file.");
@@ -351,7 +351,7 @@ WarmupModesLoad() {
 	}
 
 	if (!json_is_array(jModes)) {
-		log_amx("[ERROR] File '%s' must contains array of warmup modes.", GetConfigPath("Modes.json"));
+		log_amx("[ERROR] File '%s' must contains array of warmup modes.", GetConfigPath(MODES_FILE_PATH));
 		set_fail_state("Can't load warmup modes from config file.");
 		json_free(jModes);
 		return;
@@ -361,20 +361,29 @@ WarmupModesLoad() {
 		new Mode[S_WarmupMode];
 		
 		new JSON:jMode = json_array_get_value(jModes, i);
-
 		if (!json_is_object(jMode)) {
-			log_amx("[WARNING] Warmup mode must be object. File '%s', item #%d", GetConfigPath("Modes.json"), i);
+			log_amx("[WARNING] Warmup mode must be object. File '%s', item #%d.", GetConfigPath(MODES_FILE_PATH), i);
 			json_free(jMode);
 			continue;
 		}
 
 		json_object_get_string(jMode, "Title", Mode[WM_Title], charsmax(Mode[WM_Title]));
-		Mode[WM_Items] = VipM_IC_JsonGetItems(json_object_get_value(jMode, "Items"));
 
+		Mode[WM_Items] = VipM_IC_JsonGetItems(json_object_get_value(jMode, "Items"));
 		if (Mode[WM_Items] == Invalid_Array) {
-			log_amx("[WARNING] Warmup items array is empty. File '%s', item #%d", GetConfigPath("Modes.json"), i);
+			log_amx("[WARNING] Warmup items array is empty. File '%s', item #%d.", GetConfigPath(MODES_FILE_PATH), i);
 			json_free(jMode);
 			continue;
+		}
+
+		if (json_object_has_value(jMode, "Music", JSONString)) {
+			json_object_get_string(jMode, "Music", Mode[WM_Music], charsmax(Mode[WM_Music]));
+			if (!file_exists(Mode[WM_Music])) {
+				log_amx("[WARNING] Music file '%s' not found. File '%s', item #%d.", GetConfigPath(MODES_FILE_PATH), i);
+				Mode[WM_Music][0] = 0;
+			}
+		} else {
+			Mode[WM_Music][0] = 0;
 		}
 
 		json_free(jMode);
