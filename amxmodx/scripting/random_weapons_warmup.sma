@@ -4,14 +4,14 @@
 #include <hamsandwich>
 #include <VipM/ItemsController>
 
-// #define SOUND
-
 #define MAP_NAME_MAX_LEN 32
 #define PLUGIN_NAME_MAX_LEN 64
 
 enum _:S_WarmupMode {
 	WM_Title[64],
 	// TODO: WM_Duration, // Разная длительность у разных режимов
+	// TODO: WM_Music[PLATFORM_MAX_PATH], // Своя музыка на каждый режим
+	// TODO: WM_Cvars[S_CvarData], // Переопределение кваров на время разминки
 	Array:WM_Items,
 }
 
@@ -32,16 +32,6 @@ new g_Cvars[E_Cvars];
 
 #define Lang(%1) fmt("%l", %1)
 
-#if defined SOUND
-// TODO: Вынести в JSON файл
-new const soundRR[][] =	// Указывать звук, например 1.mp3
-{	
-	"sound/rww/RoundStart.mp3",
-//	"sound/rww/2.mp3",
-//	"sound/rww/3.mp3"
-}
-#endif
-
 new HookChain:fwd_RRound;
 new g_iRound;
 
@@ -58,6 +48,7 @@ new g_iHud_Stats, g_iHud_Timer;
 new g_iCvar_ImmunutyTime, g_iCvar_ForceRespawn;
 
 new Array:g_aDisablePlugins = Invalid_Array;
+new Array:g_aMusic = Invalid_Array;
 
 new bool:g_bWarupInProgress = false;
 new Array:g_aModes = Invalid_Array;
@@ -124,13 +115,9 @@ public ClCmd_Drop() {
 		: PLUGIN_CONTINUE;
 }
 
-#if defined SOUND
 public plugin_precache() {
-	for (new i = 0; i < sizeof(soundRR); i++) {
-		precache_generic(soundRR[i]);
-	}
+	MusicLoad();
 }
-#endif
 
 public fwdRoundEnd(WinStatus:status, ScenarioEventEndRound:event, Float:tmDelay) {
 	static bool:bWasStarted;
@@ -168,12 +155,6 @@ public fwdRoundStart() {
 		set_task(1.0, "Hud_Message", .flags = "a", .repeat = 25 );
 	}
 
-	#if defined SOUND
-	static cmd[64];
-	formatex(cmd, 63, "mp3 play ^"%s^"", soundRR[random(sizeof(soundRR))]);
-	client_cmd(0, "%s", cmd);
-	#endif
-
 	if (Cvar(DisableStats)) {
 		set_cvar_num("csstats_pause", 1);
 	}
@@ -184,8 +165,22 @@ public fwdRoundStart() {
 
 	PluginController(true);
 
-	new iRnd = random_num(0, ArraySize(g_aModes) - 1);
-	ArrayGetArray(g_aModes, iRnd, g_SelectedMode);
+	ArrayGetArray(g_aModes, random_num(0, ArraySize(g_aModes) - 1), g_SelectedMode);
+
+	PlayWarmupMusic();
+}
+
+PlayWarmupMusic() {
+	// if (g_SelectedMode[WM_Music][0]) {
+	// 	client_cmd(0, "mp3 play ^"%s^"", g_SelectedMode[WM_Music]);
+	// 	return;
+	// } else
+
+	if (g_aMusic != Invalid_Array && ArraySize(g_aMusic)) {
+		new sMusicPath[PLATFORM_MAX_PATH];
+		ArrayGetString(g_aMusic, random_num(0, ArraySize(g_aMusic) - 1), sMusicPath, charsmax(sMusicPath));
+		client_cmd(0, "mp3 play ^"%s^"", sMusicPath);
+	}
 }
 
 public fwdPlayerSpawnPost(const id) {
@@ -265,12 +260,12 @@ public CStripWeapons_Use() {
 }
 
 InvisibilityArmourys() {
-	new pArmoury = NULLENT
+	new pArmoury = NULLENT;
 	while ((pArmoury = rg_find_ent_by_class(pArmoury, "armoury_entity"))) {
 		if (get_member(pArmoury, m_Armoury_iCount) > 0) {
-			set_entvar(pArmoury, var_effects, get_entvar(pArmoury, var_effects) | EF_NODRAW)
-			set_entvar(pArmoury, var_solid, SOLID_NOT)
-			set_member(pArmoury, m_Armoury_iCount, 0)
+			set_entvar(pArmoury, var_effects, get_entvar(pArmoury, var_effects) | EF_NODRAW);
+			set_entvar(pArmoury, var_solid, SOLID_NOT);
+			set_member(pArmoury, m_Armoury_iCount, 0);
 		}
 	}
 }
@@ -420,6 +415,40 @@ DisablePluginsLoad() {
 	}
 	
 	json_free(jDisablePlugins);
+}
+
+MusicLoad() {
+	new const MUSIC_FILE_PATH[] = "Music.json";
+	g_aMusic = ArrayCreate(PLATFORM_MAX_PATH, 4);
+
+	new JSON:jMusic = Json_GetFile(GetConfigPath(MUSIC_FILE_PATH));
+
+	if (jMusic == Invalid_JSON) {
+		log_amx("[WARNING] Can't load music for warm-up.");
+		return;
+	}
+
+	if (!json_is_array(jMusic)) {
+		log_amx("[ERROR] File '%s' must contains array of .mp3 file paths.", GetConfigPath(MUSIC_FILE_PATH));
+		log_amx("[WARNING] Can't load music for warm-up.");
+		json_free(jMusic);
+		return;
+	}
+	
+	new sMusicPath[PLUGIN_NAME_MAX_LEN];
+	for (new i = 0, ii = json_array_get_count(jMusic); i < ii; i++) {
+		json_array_get_string(jMusic, i, sMusicPath, charsmax(sMusicPath));
+
+		if (!file_exists(sMusicPath)) {
+			log_amx("[WARNING] Music file '%s' not found.", sMusicPath);
+			continue;
+		}
+
+		precache_generic(sMusicPath);
+		ArrayPushString(g_aMusic, sMusicPath);
+	}
+	
+	json_free(jMusic);
 }
 
 bool:IsMapIgnored() {
