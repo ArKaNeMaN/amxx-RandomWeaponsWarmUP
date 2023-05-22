@@ -288,6 +288,7 @@ finishWurmUp() {
 
 	DisableHookChain(fwd_Spawn);
 	DisableHookChain(fwd_GiveC4);
+	DisableHookChain(fwd_RRound);
 
 	set_cvar_num("mp_forcerespawn", 0);
 	set_cvar_num("mp_respawn_immunitytime", 0);
