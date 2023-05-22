@@ -59,7 +59,7 @@ new fwOnStarted;
 new fwOnFinished;
 
 public plugin_init() {
-	register_plugin("Random Weapons WarmUP", "3.1.0", "neugomon/h1k3/ArKaNeMaN");
+	register_plugin("Random Weapons WarmUP", "3.2.0", "neugomon/h1k3/ArKaNeMaN");
 	register_dictionary("rww.ini");
 
 	if (IsMapIgnored()) {
