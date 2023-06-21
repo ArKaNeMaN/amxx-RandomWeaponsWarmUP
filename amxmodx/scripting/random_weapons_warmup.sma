@@ -58,7 +58,7 @@ new g_SelectedMode[S_WarmupMode];
 new fwOnStarted;
 new fwOnFinished;
 
-public plugin_init() {
+public plugin_precache() {
 	register_plugin("Random Weapons WarmUP", "3.2.0", "neugomon/h1k3/ArKaNeMaN");
 	register_dictionary("rww.ini");
 
@@ -67,6 +67,8 @@ public plugin_init() {
 		pause("ad");
 		return;
 	}
+
+	VipM_IC_Init();
 
 	DisablePluginsLoad();
 	WarmupModesLoad();
@@ -102,7 +104,6 @@ public plugin_end() {
 		finishWurmUp();
 	}
 }
-
 
 public fwdHasRestrictItemPre() {
 	SetHookChainReturn(ATYPE_BOOL, true);
