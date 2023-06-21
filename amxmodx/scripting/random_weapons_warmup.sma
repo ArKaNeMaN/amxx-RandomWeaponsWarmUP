@@ -129,6 +129,8 @@ public fwdRoundEnd(WinStatus:status, ScenarioEventEndRound:event, Float:tmDelay)
 		EnableHookChain(fwd_NewRound);
 		ExecuteForward(fwOnStarted);
 
+		set_member_game(m_bCompleteReset, true);
+
 		bWasStarted = true;
 	}
 }
