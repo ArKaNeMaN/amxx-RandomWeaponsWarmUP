@@ -398,7 +398,7 @@ WarmupModesLoad() {
 DisablePluginsLoad() {
 	g_aDisablePlugins = ArrayCreate(PLUGIN_NAME_MAX_LEN, 4);
 
-	new JSON:jDisablePlugins = Json_GetFile(GetConfigPath("DisablePlugins.json"));
+	new JSON:jDisablePlugins = Json_GetFile(GetConfigPath("DisablePlugins.json"), "[]");
 
 	if (jDisablePlugins == Invalid_JSON) {
 		log_amx("[WARNING] Disabling plugins will be skipped.");
@@ -431,7 +431,7 @@ MusicLoad() {
 	new const MUSIC_FILE_PATH[] = "Music.json";
 	g_aMusic = ArrayCreate(PLATFORM_MAX_PATH, 4);
 
-	new JSON:jMusic = Json_GetFile(GetConfigPath(MUSIC_FILE_PATH));
+	new JSON:jMusic = Json_GetFile(GetConfigPath(MUSIC_FILE_PATH), "[]");
 
 	if (jMusic == Invalid_JSON) {
 		log_amx("[WARNING] Can't load music for warm-up.");
@@ -462,7 +462,7 @@ MusicLoad() {
 }
 
 bool:IsMapIgnored() {
-	new JSON:jIgnoredMaps = Json_GetFile(GetConfigPath("IgnoredMaps.json"));
+	new JSON:jIgnoredMaps = Json_GetFile(GetConfigPath("IgnoredMaps.json"), "[]");
 
 	if (jIgnoredMaps == Invalid_JSON) {
 		log_amx("[WARNING] Check for ignored maps will be skipped.");
@@ -500,10 +500,15 @@ BuyZone_ToogleSolid(const solid) {
 	}
 }
 
-JSON:Json_GetFile(const sPath[]) {
+JSON:Json_GetFile(const sPath[], const sDefaultContent[] = NULL_STRING) {
 	if (!file_exists(sPath)) {
-		log_amx("[ERROR] File '%s' not found.", sPath);
-		return Invalid_JSON;
+		if (!sDefaultContent[0]) {
+			log_amx("[ERROR] File '%s' not found.", sPath);
+			return Invalid_JSON;
+		}
+
+		write_file(sPath, sDefaultContent);
+		log_amx("[INFO] File '%s' not found and was created with default content.", sPath);
 	}
 
 	new JSON:jFile = json_parse(sPath, true, true);
