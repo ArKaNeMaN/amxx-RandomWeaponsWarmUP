@@ -32,8 +32,10 @@ new g_Cvars[E_Cvars];
 
 #define Lang(%1) fmt("%l", %1)
 
+new bool:g_bDebug = false;
+new g_sDebugFilePath[PLATFORM_MAX_PATH];
+
 new HookChain:fwd_RRound;
-new g_iRound;
 
 new HamHook:fwd_Equip,
 	HamHook:fwd_WpnStrip,
@@ -61,6 +63,7 @@ new fwOnFinished;
 public plugin_precache() {
 	register_plugin("Random Weapons WarmUP", "3.2.0", "neugomon/h1k3/ArKaNeMaN");
 	register_dictionary("rww.ini");
+	InitDebug();
 
 	if (IsMapIgnored()) {
 		log_amx("[INFO] WarmUP disabled on this map.");
@@ -72,17 +75,18 @@ public plugin_precache() {
 
 	DisablePluginsLoad();
 	WarmupModesLoad();
+	MusicLoad();
 	RegisterCvars();
 	
 	fwOnStarted = CreateMultiForward("RWW_OnStarted", ET_IGNORE);
 	fwOnFinished = CreateMultiForward("RWW_OnFinished", ET_IGNORE);
 
 	RegisterHookChain(RG_RoundEnd, "fwdRoundEnd", true);
-	DisableHookChain(fwd_NewRound = RegisterHookChain(RG_CSGameRules_CheckMapConditions, "fwdRoundStart", true));
+	DisableHookChain(fwd_NewRound = RegisterHookChain(RG_CSGameRules_CheckMapConditions, "fwdRoundStart", false));
 	DisableHookChain(fwd_Spawn = RegisterHookChain(RG_CBasePlayer_Spawn, "fwdPlayerSpawnPost", true));
 	DisableHookChain(fwd_GiveC4 = RegisterHookChain(RG_CSGameRules_GiveC4, "fwdGiveC4", false));
 	DisableHookChain(fwd_BlockEntity = RegisterHookChain(RG_CBasePlayer_HasRestrictItem, "fwdHasRestrictItemPre", false));
-	EnableHookChain(fwd_RRound = RegisterHookChain(RG_CSGameRules_RestartRound, "fwdRestartRound_Pre"));
+	DisableHookChain(fwd_RRound = RegisterHookChain(RG_CSGameRules_RestartRound, "fwdRestartRound_Pre"));
 
 	DisableHamForward(fwd_Equip = RegisterHam(Ham_Use, "game_player_equip", "CGamePlayerEquip_Use", false));
 	DisableHamForward(fwd_WpnStrip = RegisterHam(Ham_Use, "player_weaponstrip", "CStripWeapons_Use", false));
@@ -116,35 +120,45 @@ public ClCmd_Drop() {
 		: PLUGIN_CONTINUE;
 }
 
-public plugin_precache() {
-	MusicLoad();
-}
-
 public fwdRoundEnd(WinStatus:status, ScenarioEventEndRound:event, Float:tmDelay) {
+	DebugLog("fwdRoundEnd(%d, %d, %.2f) [begin]", status, event, tmDelay);
+
 	static bool:bWasStarted;
+	
+	DebugLog("    bWasStarted = %s", bWasStarted ? "true" : "false");
+	DebugLog("    Cvar(OncePerMap) = %s", Cvar(OncePerMap) ? "true" : "false");
+
 	if (
 		event == ROUND_GAME_COMMENCE
 		&& (!Cvar(OncePerMap) || !bWasStarted)
 	) {
 		EnableHookChain(fwd_NewRound);
 		ExecuteForward(fwOnStarted);
-
-		set_member_game(m_bCompleteReset, true);
+		RestartGame();
 
 		bWasStarted = true;
+
+		DebugLog("    *warmup started*");
+	} else {
+		DebugLog("    *warmup not started*");
 	}
+	
+	DebugLog("fwdRoundEnd(%d, %d, %.2f) [end]", status, event, tmDelay);
 }
 
 public fwdRoundStart() {
+	DebugLog("fwdRoundStart() [begin]");
 	g_bWarupInProgress = true;
 
 	if (Cvar(CleanupMap)) {
+		DebugLog("    *clean map*");
 		EnableHamForward(fwd_Equip);
 		EnableHamForward(fwd_WpnStrip);
 		EnableHamForward(fwd_Entity);
 	}
 
 	DisableHookChain(fwd_NewRound);
+	EnableHookChain(fwd_RRound);
 	EnableHookChain(fwd_Spawn);
 	EnableHookChain(fwd_GiveC4);
 
@@ -152,31 +166,38 @@ public fwdRoundStart() {
 	set_pcvar_num(g_iCvar_ImmunutyTime, Cvar(DeathMatch_SpawnProtectionDuration));
 
 	if (Cvar(DeathMatch_Enable)) {
+		DebugLog("    *dm mode*");
 		set_cvar_num("mp_round_infinite", 1);
 		set_task(1.0, "Show_Timer", .flags = "a", .repeat = Cvar(Duration));
 	} else {
+		DebugLog("    *non-dm mode*");
 		set_task(1.0, "Hud_Message", .flags = "a", .repeat = 25 );
 	}
 
 	if (Cvar(DisableStats)) {
 		set_cvar_num("csstats_pause", 1);
+		DebugLog("    *stats disabled*");
 	}
 
 	if (Cvar(WeaponsPickupBlock)) {
 		EnableHookChain(fwd_BlockEntity);
+		DebugLog("    *enable pickup blocking*");
 	}
 
 	PluginController(true);
 
-	ArrayGetArray(g_aModes, random_num(0, ArraySize(g_aModes) - 1), g_SelectedMode);
+	new rnd = random_num(0, ArraySize(g_aModes) - 1);
+	ArrayGetArray(g_aModes, rnd, g_SelectedMode);
+	DebugLog("    rnd = %d (%s)", rnd, g_SelectedMode[WM_Title]);
 
 	PlayWarmupMusic();
+
+	DebugLog("fwdRoundStart() [end]");
 }
 
 PlayWarmupMusic() {
 	if (g_SelectedMode[WM_Music][0]) {
 		client_cmd(0, "mp3 play ^"%s^"", g_SelectedMode[WM_Music]);
-		return;
 	} else if (g_aMusic != Invalid_Array && ArraySize(g_aMusic)) {
 		new sMusicPath[PLATFORM_MAX_PATH];
 		ArrayGetString(g_aMusic, random_num(0, ArraySize(g_aMusic) - 1), sMusicPath, charsmax(sMusicPath));
@@ -185,11 +206,15 @@ PlayWarmupMusic() {
 }
 
 public fwdPlayerSpawnPost(const id) {
+	// DebugLog("fwdPlayerSpawnPost(%d(%n)) [begin]", id, id);
+	
 	if (!is_user_alive(id)) {
+		// DebugLog("    *player is dead*");
 		return;
 	}
 
 	if (Cvar(CleanupMap)) {
+		// DebugLog("    *InvisibilityArmourys*");
 		InvisibilityArmourys();
 	}
 
@@ -201,41 +226,50 @@ public fwdPlayerSpawnPost(const id) {
 	rg_give_item(id, "weapon_knife");
 
 	VipM_IC_GiveItems(id, g_SelectedMode[WM_Items]);
+	
+	// DebugLog("fwdPlayerSpawnPost(%d(%n)) [end]", id, id);
 }
 
 public fwdGiveC4() {
+	// DebugLog("fwdGiveC4()");
 	return HC_SUPERCEDE;
 }
 
 public Show_Timer() {
+	DebugLog("Show_Timer() [begin]");
 	static timer = -1;
 
 	if (timer < 0) {
+		DebugLog("    *start timer*");
+		DebugLog("    timer = %d", timer);
 		timer = Cvar(Duration);
 	}
 
 	if (--timer == 0) {
+		DebugLog("    *finishWurmUp (--timer == 0)*");
 		finishWurmUp();
 		timer = -1;
+		
+		DebugLog("Show_Timer() [end]");
 		return;
 	}
+	DebugLog("    --timer = %d", timer);
 
 	if (Cvar(DisableStats)) {
+		DebugLog("    *show disable stats hud*");
 		set_hudmessage(255, 0, 0, .x = -1.0, .y = 0.05, .holdtime = 0.9, .channel = -1);
 		ShowSyncHudMsg(0, g_iHud_Stats, "%l", "RWW_HUD_STATS_OFF");
 	}
 	
 	set_hudmessage(135, 206, 235, .x = -1.0, .y = 0.08, .holdtime = 0.9, .channel = -1);
 	ShowSyncHudMsg(0, g_iHud_Timer, "%l", "RWW_HUD_DM_TIMER", g_SelectedMode[WM_Title], timer);
+	
+	DebugLog("Show_Timer() [end]");
 }
 
 public fwdRestartRound_Pre() {
-	g_iRound++;
-
-	if (g_iRound >= 2) {
-		DisableHookChain(fwd_RRound);
-		finishWurmUp();
-	}
+	DebugLog("fwdRestartRound_Pre()");
+	finishWurmUp();
 }
 
 public Hud_Message() {
@@ -272,11 +306,14 @@ InvisibilityArmourys() {
 }
 
 finishWurmUp() {
+	DebugLog("finishWurmUp() [begin]");
+
 	g_bWarupInProgress = false;
 
 	BuyZone_ToogleSolid(SOLID_TRIGGER);
 
 	if (Cvar(CleanupMap)) {
+		DebugLog("    *clean map - disable*");
 		DisableHamForward(fwd_Equip);
 		DisableHamForward(fwd_WpnStrip);
 		DisableHamForward(fwd_Entity);
@@ -291,10 +328,12 @@ finishWurmUp() {
 	set_cvar_num("mp_round_infinite", 0);
 
 	if (Cvar(DisableStats)) {
+		DebugLog("    *enable stats*");
 		set_cvar_num("csstats_pause", 0);
 	}
 
 	if (Cvar(WeaponsPickupBlock)) {
+		DebugLog("    *disable pickup blocking*");
 		DisableHookChain(fwd_BlockEntity);
 	}
 
@@ -302,19 +341,26 @@ finishWurmUp() {
 	
 	ExecuteForward(fwOnFinished);
 
+	DebugLog("    Cvar(RestartsNum) = %d", Cvar(RestartsNum));
+	DebugLog("    Cvar(RestartInterval) = %.2f", Cvar(RestartInterval));
+
 	@Task_Restart();
 	if (Cvar(RestartsNum) > 1) {
 		set_task(Cvar(RestartInterval), "@Task_Restart", .flags = "a", .repeat = Cvar(RestartsNum) - 1);
 	}
 	set_task(Cvar(RestartInterval) * float(Cvar(RestartsNum) - 1), "@Task_WarmupEnd");
+	
+	DebugLog("finishWurmUp() [end]");
 }
 
 @Task_Restart() {
-	set_member_game(m_bCompleteReset, true);
-	rg_restart_round();
+	DebugLog("Task_Restart()");
+	RestartGame();
 }
 
 @Task_WarmupEnd() {
+	DebugLog("Task_WarmupEnd()");
+
 	if (Cvar(DisableStats)) {
 		set_hudmessage(255, 0, 0, .x = -1.0, .y = 0.05, .holdtime = 5.0, .channel = -1);
 		ShowSyncHudMsg(0, g_iHud_Stats, "%l", "RWW_HUD_STATS_ON");
@@ -502,6 +548,12 @@ BuyZone_ToogleSolid(const solid) {
 	}
 }
 
+RestartGame() {
+	// TODO: Походу m_bCompleteReset не триггерит ROUND_GAME_COMMENCE, а надо бы :)
+	set_member_game(m_bCompleteReset, true);
+	rg_restart_round();
+}
+
 JSON:Json_GetFile(const sPath[], const sDefaultContent[] = NULL_STRING) {
 	if (!file_exists(sPath)) {
 		if (!sDefaultContent[0]) {
@@ -523,16 +575,54 @@ JSON:Json_GetFile(const sPath[], const sDefaultContent[] = NULL_STRING) {
 	return jFile;
 }
 
-GetConfigPath(const sPath[]) {
+GetConfigPath(const sPath[] = NULL_STRING) {
 	static __amxx_configsdir[PLATFORM_MAX_PATH];
 	if (!__amxx_configsdir[0]) {
 		get_localinfo("amxx_configsdir", __amxx_configsdir, charsmax(__amxx_configsdir));
 	}
 	
 	new sOut[PLATFORM_MAX_PATH];
-	formatex(sOut, charsmax(sOut), "%s/plugins/RWW/%s", __amxx_configsdir, sPath);
+	formatex(sOut, charsmax(sOut), "%s/plugins/RWW%s%s", __amxx_configsdir, sPath[0] ? "/" : "", sPath);
 
 	return sOut;
+}
+
+InitDebug(const bool:bForceEnable = false) {
+	g_bDebug = bForceEnable || bool:(plugin_flags() & AMX_FLAG_DEBUG);
+
+	if (!g_bDebug) {
+		log_amx("Debug mode disabled");
+		return;
+	}
+	
+	get_localinfo("amxx_logs", g_sDebugFilePath, charsmax(g_sDebugFilePath));
+	add(g_sDebugFilePath, charsmax(g_sDebugFilePath), "/RWW/");
+	if (!dir_exists(g_sDebugFilePath)) {
+		mkdir(g_sDebugFilePath);
+	}
+
+	new sFileName[64];
+	get_time("%Y-%m-%d.log", sFileName, charsmax(sFileName));
+	add(g_sDebugFilePath, charsmax(g_sDebugFilePath), sFileName);
+
+	new sMapName[MAP_NAME_MAX_LEN];
+	rh_get_mapname(sMapName, charsmax(sMapName), MNT_TRUE);
+
+	log_amx("Debug mode enabled (%s)", g_sDebugFilePath);
+	log_to_file(g_sDebugFilePath, "--- Start debug logging (Map: %s) ---", sMapName);
+}
+
+DebugLog(const sFmt[], any:...) {
+	if (!g_bDebug) {
+		return;
+	}
+
+	static sMsg[512];
+
+	vformat(sMsg, charsmax(sMsg), sFmt, 2);
+	format(sMsg, charsmax(sMsg), "[RWW][DEBUG] %s", sMsg);
+
+	log_to_file(g_sDebugFilePath, "%s", sMsg);
 }
 
 RegisterCvars() {

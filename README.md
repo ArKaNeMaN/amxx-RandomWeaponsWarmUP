@@ -1,4 +1,4 @@
-# Random Weapons WarnUP
+# Random Weapons WarmUP
 
 Форк плагина [[fork] Random Weapons WarmUP 2.4.9](https://dev-cs.ru/resources/384/) от [h1k3](https://dev-cs.ru/members/95/), который, в свою очередь, является форком плагина от neygomon'а.
 
