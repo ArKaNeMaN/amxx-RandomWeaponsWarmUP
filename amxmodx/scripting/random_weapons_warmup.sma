@@ -700,3 +700,11 @@ RegisterCvars() {
 
 	AutoExecConfig(true, "Cvars", "RWW");
 }
+
+public plugin_natives() {
+	register_native("RWW_IsWarmupInProgress", "@_IsWarmupInProgress");
+}
+
+@_IsWarmupInProgress() {
+	return g_bWarupInProgress;
+}
