@@ -7,6 +7,12 @@
 #define MAP_NAME_MAX_LEN 32
 #define PLUGIN_NAME_MAX_LEN 64
 
+enum (+= 100) {
+	TASK_RESTARTS_AFTER_WARMUP,
+	TASK_WARMUP_END,
+	TASK_TIMER,
+}
+
 enum _:S_WarmupMode {
 	WM_Title[64],
 	// TODO: WM_Duration, // Разная длительность у разных режимов
@@ -23,6 +29,7 @@ enum E_Cvars {
 	bool:Cvar_CleanupMap,
 	bool:Cvar_WeaponsPickupBlock,
 	bool:Cvar_OncePerMap,
+	bool:Cvar_StartAfterSvRestart,
 	
 	bool:Cvar_DeathMatch_Enable,
 	Cvar_DeathMatch_SpawnProtectionDuration,
@@ -42,6 +49,7 @@ new HamHook:fwd_Equip,
 	HamHook:fwd_Entity;
 
 new HookChain:fwd_NewRound,
+	HookChain:fwd_RoundEnd,
 	HookChain:fwd_BlockEntity,
 	HookChain:fwd_Spawn,
 	HookChain:fwd_GiveC4;
@@ -59,6 +67,8 @@ new g_SelectedMode[S_WarmupMode];
 
 new fwOnStarted;
 new fwOnFinished;
+
+new g_iTimer = -1;
 
 public plugin_precache() {
 	register_plugin("Random Weapons WarmUP", "3.2.0", "neugomon/h1k3/ArKaNeMaN");
@@ -81,7 +91,7 @@ public plugin_precache() {
 	fwOnStarted = CreateMultiForward("RWW_OnStarted", ET_IGNORE);
 	fwOnFinished = CreateMultiForward("RWW_OnFinished", ET_IGNORE);
 
-	RegisterHookChain(RG_RoundEnd, "fwdRoundEnd", true);
+	EnableHookChain(fwd_RoundEnd = RegisterHookChain(RG_RoundEnd, "fwdRoundEnd", true));
 	DisableHookChain(fwd_NewRound = RegisterHookChain(RG_CSGameRules_CheckMapConditions, "fwdRoundStart", false));
 	DisableHookChain(fwd_Spawn = RegisterHookChain(RG_CBasePlayer_Spawn, "fwdPlayerSpawnPost", true));
 	DisableHookChain(fwd_GiveC4 = RegisterHookChain(RG_CSGameRules_GiveC4, "fwdGiveC4", false));
@@ -105,7 +115,7 @@ public plugin_precache() {
 
 public plugin_end() {
 	if (g_bWarupInProgress) {
-		finishWurmUp();
+		finishWarmUp();
 	}
 }
 
@@ -121,34 +131,38 @@ public ClCmd_Drop() {
 }
 
 public fwdRoundEnd(WinStatus:status, ScenarioEventEndRound:event, Float:tmDelay) {
-	DebugLog("fwdRoundEnd(%d, %d, %.2f) [begin]", status, event, tmDelay);
+	if (g_bWarupInProgress) {
+
+		return;
+	}
 
 	static bool:bWasStarted;
-	
-	DebugLog("    bWasStarted = %s", bWasStarted ? "true" : "false");
-	DebugLog("    Cvar(OncePerMap) = %s", Cvar(OncePerMap) ? "true" : "false");
+
+	if (Cvar(OncePerMap) && bWasStarted) {
+		return;
+	}
 
 	if (
 		event == ROUND_GAME_COMMENCE
-		&& (!Cvar(OncePerMap) || !bWasStarted)
+		|| (Cvar(StartAfterSvRestart) && event == ROUND_GAME_RESTART)
 	) {
-		EnableHookChain(fwd_NewRound);
 		ExecuteForward(fwOnStarted);
-		RestartGame();
-
 		bWasStarted = true;
+		g_bWarupInProgress = true;
 
-		DebugLog("    *warmup started*");
-	} else {
-		DebugLog("    *warmup not started*");
+		// Выключаем, т.к. далее будет рестарт с commence
+		// Чтобы оно не сработало ещё раз
+		DisableHookChain(fwd_RoundEnd);
+
+		// Включаем хук нового раунда, чтобы при рестарте строкой ниже началась разминка
+		EnableHookChain(fwd_NewRound);
+
+		RestartGame();
 	}
-	
-	DebugLog("fwdRoundEnd(%d, %d, %.2f) [end]", status, event, tmDelay);
 }
 
 public fwdRoundStart() {
-	DebugLog("fwdRoundStart() [begin]");
-	g_bWarupInProgress = true;
+	RemoveAllTasks();
 
 	if (Cvar(CleanupMap)) {
 		DebugLog("    *clean map*");
@@ -166,22 +180,20 @@ public fwdRoundStart() {
 	set_pcvar_num(g_iCvar_ImmunutyTime, Cvar(DeathMatch_SpawnProtectionDuration));
 
 	if (Cvar(DeathMatch_Enable)) {
-		DebugLog("    *dm mode*");
 		set_cvar_num("mp_round_infinite", 1);
-		set_task(1.0, "Show_Timer", .flags = "a", .repeat = Cvar(Duration));
+
+		g_iTimer = Cvar(Duration);
+		set_task(1.0, "Show_Timer", TASK_TIMER, .flags = "a", .repeat = Cvar(Duration));
 	} else {
-		DebugLog("    *non-dm mode*");
-		set_task(1.0, "Hud_Message", .flags = "a", .repeat = 25 );
+		set_task(1.0, "Hud_Message", TASK_TIMER, .flags = "a", .repeat = 25 );
 	}
 
 	if (Cvar(DisableStats)) {
 		set_cvar_num("csstats_pause", 1);
-		DebugLog("    *stats disabled*");
 	}
 
 	if (Cvar(WeaponsPickupBlock)) {
 		EnableHookChain(fwd_BlockEntity);
-		DebugLog("    *enable pickup blocking*");
 	}
 
 	PluginController(true);
@@ -191,8 +203,6 @@ public fwdRoundStart() {
 	DebugLog("    rnd = %d (%s)", rnd, g_SelectedMode[WM_Title]);
 
 	PlayWarmupMusic();
-
-	DebugLog("fwdRoundStart() [end]");
 }
 
 PlayWarmupMusic() {
@@ -237,23 +247,15 @@ public fwdGiveC4() {
 
 public Show_Timer() {
 	DebugLog("Show_Timer() [begin]");
-	static timer = -1;
 
-	if (timer < 0) {
-		DebugLog("    *start timer*");
-		DebugLog("    timer = %d", timer);
-		timer = Cvar(Duration);
-	}
-
-	if (--timer == 0) {
-		DebugLog("    *finishWurmUp (--timer == 0)*");
-		finishWurmUp();
-		timer = -1;
+	if (--g_iTimer <= 0) {
+		DebugLog("    *finishWarmUp (--g_iTimer == 0)*");
+		finishWarmUp();
 		
 		DebugLog("Show_Timer() [end]");
 		return;
 	}
-	DebugLog("    --timer = %d", timer);
+	DebugLog("    --g_iTimer = %d", g_iTimer);
 
 	if (Cvar(DisableStats)) {
 		DebugLog("    *show disable stats hud*");
@@ -262,14 +264,14 @@ public Show_Timer() {
 	}
 	
 	set_hudmessage(135, 206, 235, .x = -1.0, .y = 0.08, .holdtime = 0.9, .channel = -1);
-	ShowSyncHudMsg(0, g_iHud_Timer, "%l", "RWW_HUD_DM_TIMER", g_SelectedMode[WM_Title], timer);
+	ShowSyncHudMsg(0, g_iHud_Timer, "%l", "RWW_HUD_DM_TIMER", g_SelectedMode[WM_Title], g_iTimer);
 	
 	DebugLog("Show_Timer() [end]");
 }
 
 public fwdRestartRound_Pre() {
 	DebugLog("fwdRestartRound_Pre()");
-	finishWurmUp();
+	finishWarmUp();
 }
 
 public Hud_Message() {
@@ -305,15 +307,12 @@ InvisibilityArmourys() {
 	}
 }
 
-finishWurmUp() {
-	DebugLog("finishWurmUp() [begin]");
-
+finishWarmUp() {
 	g_bWarupInProgress = false;
+	RemoveAllTasks();
 
 	BuyZone_ToogleSolid(SOLID_TRIGGER);
-
 	if (Cvar(CleanupMap)) {
-		DebugLog("    *clean map - disable*");
 		DisableHamForward(fwd_Equip);
 		DisableHamForward(fwd_WpnStrip);
 		DisableHamForward(fwd_Entity);
@@ -328,12 +327,10 @@ finishWurmUp() {
 	set_cvar_num("mp_round_infinite", 0);
 
 	if (Cvar(DisableStats)) {
-		DebugLog("    *enable stats*");
 		set_cvar_num("csstats_pause", 0);
 	}
 
 	if (Cvar(WeaponsPickupBlock)) {
-		DebugLog("    *disable pickup blocking*");
 		DisableHookChain(fwd_BlockEntity);
 	}
 
@@ -341,16 +338,17 @@ finishWurmUp() {
 	
 	ExecuteForward(fwOnFinished);
 
-	DebugLog("    Cvar(RestartsNum) = %d", Cvar(RestartsNum));
-	DebugLog("    Cvar(RestartInterval) = %.2f", Cvar(RestartInterval));
-
 	@Task_Restart();
 	if (Cvar(RestartsNum) > 1) {
-		set_task(Cvar(RestartInterval), "@Task_Restart", .flags = "a", .repeat = Cvar(RestartsNum) - 1);
+		set_task(Cvar(RestartInterval), "@Task_Restart", TASK_RESTARTS_AFTER_WARMUP, .flags = "a", .repeat = Cvar(RestartsNum) - 1);
 	}
-	set_task(Cvar(RestartInterval) * float(Cvar(RestartsNum) - 1), "@Task_WarmupEnd");
-	
-	DebugLog("finishWurmUp() [end]");
+	set_task(Cvar(RestartInterval) * float(Cvar(RestartsNum) - 1) + 0.1, "@Task_WarmupEnd", TASK_WARMUP_END);
+}
+
+RemoveAllTasks() {
+	remove_task(TASK_RESTARTS_AFTER_WARMUP);
+	remove_task(TASK_WARMUP_END);
+	remove_task(TASK_TIMER);
 }
 
 @Task_Restart() {
@@ -360,6 +358,7 @@ finishWurmUp() {
 
 @Task_WarmupEnd() {
 	DebugLog("Task_WarmupEnd()");
+	DebugLog("    Cvar(DisableStats) = %s", Cvar(DisableStats) ? "true" : "false");
 
 	if (Cvar(DisableStats)) {
 		set_hudmessage(255, 0, 0, .x = -1.0, .y = 0.05, .holdtime = 5.0, .channel = -1);
@@ -368,6 +367,10 @@ finishWurmUp() {
 
 	set_hudmessage(135, 206, 235, .x = -1.0, .y = 0.08, .holdtime = 5.0, .channel = -1);
 	ShowSyncHudMsg(0, g_iHud_Timer, "%l", "RWW_HUD_WARMUP_END");
+	
+	// После всех рестартов включаем обратно хук RoundEnd
+	// Чтобы можно было ловить следующий commence
+	EnableHookChain(fwd_RoundEnd);
 }
 
 PluginController(const bool:bState) {
@@ -549,8 +552,17 @@ BuyZone_ToogleSolid(const solid) {
 }
 
 RestartGame() {
-	// TODO: Походу m_bCompleteReset не триггерит ROUND_GAME_COMMENCE, а надо бы :)
 	set_member_game(m_bCompleteReset, true);
+	set_member_game(m_bGameStarted, true);
+
+	rg_round_end(
+		.tmDelay = 0.0,
+		.st = WINSTATUS_NONE,
+		.event = ROUND_GAME_COMMENCE,
+		.message = "",
+		.sentence = "",
+		.trigger = true
+	);
 	rg_restart_round();
 }
 
@@ -667,6 +679,12 @@ RegisterCvars() {
 		Lang("RWW_CVAR_ONCE_PER_MAP"),
 		true, 0.0, true, 1.0
 	), Cvar(OncePerMap));
+
+	bind_pcvar_num(create_cvar(
+		"RWW_StartAfterSvRestart", "0", FCVAR_NONE,
+		Lang("RWW_CVAR_START_AFTER_SV_RESTART"),
+		true, 0.0, true, 1.0
+	), Cvar(StartAfterSvRestart));
 
 
 	bind_pcvar_num(create_cvar(
