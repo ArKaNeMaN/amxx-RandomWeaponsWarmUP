@@ -55,7 +55,6 @@ new HookChain:fwd_NewRound,
 	HookChain:fwd_GiveC4;
 
 new g_iHud_Stats, g_iHud_Timer;
-new g_iCvar_ImmunutyTime, g_iCvar_ForceRespawn;
 
 new Array:g_aDisablePlugins = Invalid_Array;
 new Array:g_aMusic = Invalid_Array;
@@ -103,9 +102,6 @@ public plugin_precache() {
 	DisableHamForward(fwd_Entity = RegisterHam(Ham_CS_Restart, "armoury_entity", "CArmoury_Restart", false));
 
 	register_clcmd("drop", "ClCmd_Drop");
-
-	g_iCvar_ImmunutyTime = get_cvar_pointer("mp_respawn_immunitytime");
-	g_iCvar_ForceRespawn  = get_cvar_pointer("mp_forcerespawn");
 
 	g_iHud_Stats = CreateHudSyncObj();
 	g_iHud_Timer = CreateHudSyncObj();
@@ -171,13 +167,16 @@ public fwdRoundStart() {
 		EnableHamForward(fwd_Entity);
 	}
 
+	// До следующей разминки оно нам не надо
+	// Поэтому выключаем
 	DisableHookChain(fwd_NewRound);
+
 	EnableHookChain(fwd_RRound);
 	EnableHookChain(fwd_Spawn);
 	EnableHookChain(fwd_GiveC4);
-
-	set_pcvar_num(g_iCvar_ForceRespawn, Cvar(DeathMatch_Enable));
-	set_pcvar_num(g_iCvar_ImmunutyTime, Cvar(DeathMatch_SpawnProtectionDuration));
+	
+	set_cvar_num("mp_forcerespawn", Cvar(DeathMatch_Enable));
+	set_cvar_num("mp_respawn_immunitytime", Cvar(DeathMatch_SpawnProtectionDuration));
 
 	if (Cvar(DeathMatch_Enable)) {
 		set_cvar_num("mp_round_infinite", 1);
