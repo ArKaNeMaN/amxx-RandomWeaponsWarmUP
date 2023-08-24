@@ -70,7 +70,7 @@ new fwOnFinished;
 new g_iTimer = -1;
 
 public plugin_precache() {
-	register_plugin("Random Weapons WarmUP", "3.2.0", "neugomon/h1k3/ArKaNeMaN");
+	register_plugin("Random Weapons WarmUP", "3.3.0", "neugomon/h1k3/ArKaNeMaN");
 	register_dictionary("rww.ini");
 	InitDebug();
 
