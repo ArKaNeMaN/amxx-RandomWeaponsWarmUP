@@ -705,6 +705,6 @@ public plugin_natives() {
 	register_native("RWW_IsWarmupInProgress", "@_IsWarmupInProgress");
 }
 
-@_IsWarmupInProgress() {
+bool:@_IsWarmupInProgress() {
 	return g_bWarupInProgress;
 }
