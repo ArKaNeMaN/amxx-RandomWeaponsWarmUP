@@ -70,7 +70,7 @@ new fwOnFinished;
 new g_iTimer = -1;
 
 public plugin_precache() {
-	register_plugin("Random Weapons WarmUP", "3.3.0", "neugomon/h1k3/ArKaNeMaN");
+	register_plugin("Random Weapons WarmUP", "3.3.1", "neugomon/h1k3/ArKaNeMaN");
 	register_dictionary("rww.ini");
 	InitDebug();
 
@@ -602,7 +602,6 @@ InitDebug(const bool:bForceEnable = false) {
 	g_bDebug = bForceEnable || bool:(plugin_flags() & AMX_FLAG_DEBUG);
 
 	if (!g_bDebug) {
-		log_amx("Debug mode disabled");
 		return;
 	}
 	
