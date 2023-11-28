@@ -241,6 +241,7 @@ public fwdPlayerSpawnPost(const id) {
 
 public fwdGiveC4() {
 	// DebugLog("fwdGiveC4()");
+	SetHookChainReturn(ATYPE_INTEGER, 0);
 	return HC_SUPERCEDE;
 }
 
