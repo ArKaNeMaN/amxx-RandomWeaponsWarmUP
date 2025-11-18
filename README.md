@@ -13,7 +13,7 @@
 
 - AmxModX версии 1.9.0 или новее;
 - ReAPI желательно свежей версии;
-- ItemsController из [VipModular](https://github.com/ArKaNeMaN/amxx-VipModular-pub/releases) (Ядро не требуется).
+- ItemsController из [VipModular](https://github.com/AmxxModularEcosystem/VipModular/releases) (Ядро не требуется).
 
 ## Настройка режимов
 
@@ -27,7 +27,7 @@
 | Items     | Да            | Массив предметов для ItemsController, которые будут выдаваться всем игрокам.
 | Music     | Нет           | Путь до `.mp3` файла, который будет проигрываться во время этого режима.
 
-[Подробнее о структуре предметов для ItemcController...](https://github.com/ArKaNeMaN/amxx-VipModular-pub/blob/master/readme/items.md)
+[Подробнее о структуре предметов для ItemsController...](https://github.com/AmxxModularEcosystem/VipModular/blob/master/readme/extensions/items.md)
 
 ### Пример содержимого файла режимов разминки
 
@@ -47,7 +47,7 @@
                         "Type": "Weapon",
                         "Name": "weapon_ak47"
                     }
-                ],
+                ]
             },
             {
                 "Type": "Weapon",
