@@ -70,7 +70,7 @@ new fwOnFinished;
 new g_iTimer = -1;
 
 public plugin_precache() {
-	register_plugin("Random Weapons WarmUP", "3.3.1", "neugomon/h1k3/ArKaNeMaN");
+	register_plugin("Random Weapons WarmUP", "3.4.0", "neugomon/h1k3/ArKaNeMaN");
 	register_dictionary("rww.ini");
 	InitDebug();
 
@@ -230,9 +230,6 @@ public fwdPlayerSpawnPost(const id) {
 	BuyZone_ToogleSolid(SOLID_NOT);
 	rg_remove_all_items(id);
 	set_member_game(m_bMapHasBuyZone, true);
-
-	// А надо ли выдавать нож, если это явно не указано в кфг?
-	rg_give_item(id, "weapon_knife");
 
 	VipM_IC_GiveItems(id, g_SelectedMode[WM_Items]);
 	
