@@ -70,7 +70,7 @@ new fwOnFinished;
 new g_iTimer = -1;
 
 public plugin_precache() {
-	register_plugin("Random Weapons WarmUP", "3.4.1", "neugomon/h1k3/ArKaNeMaN");
+	register_plugin("Random Weapons WarmUP", "3.4.2", "neugomon/h1k3/ArKaNeMaN");
 	register_dictionary("rww.ini");
 	InitDebug();
 
@@ -215,25 +215,21 @@ PlayWarmupMusic() {
 }
 
 public fwdPlayerSpawnPost(const id) {
-	// DebugLog("fwdPlayerSpawnPost(%d(%n)) [begin]", id, id);
-	
 	if (!is_user_alive(id)) {
-		// DebugLog("    *player is dead*");
 		return;
 	}
 
 	if (Cvar(CleanupMap)) {
-		// DebugLog("    *InvisibilityArmourys*");
 		InvisibilityArmourys();
 	}
 
 	BuyZone_ToogleSolid(SOLID_NOT);
-	rg_remove_all_items(id, true);
+
+	rg_remove_all_items(id);
+
 	set_member_game(m_bMapHasBuyZone, true);
 
 	VipM_IC_GiveItems(id, g_SelectedMode[WM_Items]);
-	
-	// DebugLog("fwdPlayerSpawnPost(%d(%n)) [end]", id, id);
 }
 
 public fwdGiveC4() {
