@@ -1,0 +1,22 @@
+# yaml-language-server: $schema=https://raw.githubusercontent.com/AmxxModularEcosystem/amxx-builder/master/schema/amxbuild.schema.json
+
+name: RandomWeaponsWarmUP
+
+# amxmodx.version не указан — amxb использует последний доступный компилятор.
+# Проект таргетит AMXX 1.9.0+ (см. README), пиннинг версии не требуется.
+
+deps:
+  # ReAPI — include из release-архива, политика "latest", как в старом CI.
+  - repo: rehlds/ReAPI
+    ref: latest
+    source: release
+    asset: "reapi-bin-*.zip"
+    include_path: addons/amxmodx/scripting/include
+
+  # VipM/ItemsController из VipModular (публичный репозиторий include-файлов).
+  # Версия закреплена как в старом CI (VIP_MODULAR_TAG=5.0.0-b12).
+  - ArKaNeMaN/amxx-VipModular-pub@5.0.0-b12:amxmodx/scripting/include
+
+output:
+  readme: true            # README.md в корне архива — как в старом пакете
+  generate_ini: false     # plugins-*.ini не использовался (плагин включается на сервере вручную)
