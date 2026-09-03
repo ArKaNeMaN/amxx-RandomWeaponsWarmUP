@@ -11,6 +11,7 @@ enum (+= 100) {
 	TASK_RESTARTS_AFTER_WARMUP,
 	TASK_WARMUP_END,
 	TASK_TIMER,
+	TASK_GIVE_ITEMS,
 }
 
 enum _:S_WarmupMode {
@@ -70,7 +71,7 @@ new fwOnFinished;
 new g_iTimer = -1;
 
 public plugin_precache() {
-	register_plugin("Random Weapons WarmUP", "3.4.2", "neugomon/h1k3/ArKaNeMaN");
+	register_plugin("Random Weapons WarmUP", "3.4.4", "neugomon/h1k3/ArKaNeMaN");
 	register_dictionary("rww.ini");
 	InitDebug();
 
@@ -224,12 +225,20 @@ public fwdPlayerSpawnPost(const id) {
 	}
 
 	BuyZone_ToogleSolid(SOLID_NOT);
-
-	rg_remove_all_items(id);
-
 	set_member_game(m_bMapHasBuyZone, true);
 
-	VipM_IC_GiveItems(id, g_SelectedMode[WM_Items]);
+	set_task(0.1, "@Task_GiveItems", TASK_GIVE_ITEMS + id);
+}
+
+@Task_GiveItems(const taskIndex) {
+	if (!g_bWarupInProgress) {
+		return;
+	}
+
+	new playerIndex = taskIndex - TASK_GIVE_ITEMS;
+	
+	rg_remove_all_items(playerIndex);
+	VipM_IC_GiveItems(playerIndex, g_SelectedMode[WM_Items]);
 }
 
 public fwdGiveC4() {
